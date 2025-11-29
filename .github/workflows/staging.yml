@@ -1,0 +1,71 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - staging  # Change this to your default branch if different
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:  # Define environment variables at the job level
+      IMAGE_NAME: staging-$(date +%Y%m%d%H%M%S)
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v1'
+
+      - name: 'Use gcloud CLI'
+        run: 'gcloud info'
+
+      - name: Set image name with date
+        id: vars
+        run: |
+          IMAGE_TAG=staging-$(date +%Y%m%d%H%M%S)
+          echo "IMAGE_NAME=gcr.io/${{ secrets.GCP_PROJECT_ID }}/$IMAGE_TAG" >> $GITHUB_ENV        
+
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ secrets.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.REPOSITORY_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
+          docker build -t ${{ secrets.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.REPOSITORY_NAME }}/forsvar-webhooks-staging:latest .
+
+      - name: Configure Docker Client of Gcloud
+        run:  |-
+          gcloud auth configure-docker --quiet
+          gcloud auth configure-docker ${{ secrets.REGION }}-docker.pkg.dev --quiet
+
+      - name: Push Docker image
+        run: |
+          docker push ${{ secrets.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.REPOSITORY_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker push ${{ secrets.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.REPOSITORY_NAME }}/forsvar-webhooks-staging:latest
+
+      # Step 6: Set Image to Deployment GKE
+      - name: Set up kubectl
+        uses: ameydev/gke-kubectl-action@master
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          APPLICATION_CREDENTIALS: ${{ secrets.GCP_SA_KEY_BASE64 }}
+          CLUSTER_NAME: gke-forsvar
+          ZONE_NAME: ${{ secrets.REGION }}    
+        with:
+          args: set image deployment/forsvar-webhooks -n staging *=${{ secrets.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.REPOSITORY_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}         
+
+      # Step 6: roll Out Deployment
+      - name: Roll Out Deployment
+        uses: ameydev/gke-kubectl-action@master
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          APPLICATION_CREDENTIALS: ${{ secrets.GCP_SA_KEY_BASE64 }}
+          CLUSTER_NAME: gke-forsvar
+          ZONE_NAME: ${{ secrets.REGION }}    
+        with:
+          args: rollout restart deployment/forsvar-webhooks -n staging             
