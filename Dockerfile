@@ -42,5 +42,5 @@ RUN composer install --no-dev --optimize-autoloader --no-interaction --no-progre
 # ----------------------------------------------------
 # 🔹 Default command: run the worker
 # ----------------------------------------------------
-CMD ["tail", "-f", "/dev/null"]
-#CMD ["php", "/app/worker.php"]
+#CMD ["tail", "-f", "/dev/null"]
+CMD ["php", "/app/worker.php"]
