@@ -1,41 +1,46 @@
-FROM php:8.1-fpm-alpine
+FROM php:8.1-cli-alpine
 
 # ----------------------------------------------------
-# 🔹 Install required system libs + PHP build deps
+# 🔹 Install required system libs
 # ----------------------------------------------------
 RUN apk add --no-cache \
         curl \
         bash \
         libcurl \
-        mariadb-connector-c \
-        mariadb-dev \
         openssl \
         ca-certificates \
         oniguruma-dev \
         libxml2-dev \
-        autoconf \
-        make \
-        g++ 
+        git \
+        unzip
 
 # ----------------------------------------------------
 # 🔹 Install PHP extensions
 # ----------------------------------------------------
-RUN docker-php-ext-install mysqli pdo_mysql
+RUN docker-php-ext-install pcntl mysqli pdo_mysql
 
 # ----------------------------------------------------
-# 🔹 Create workdir
+# 🔹 Install Composer (for Google PubSub SDK)
+# ----------------------------------------------------
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+# ----------------------------------------------------
+# 🔹 Working directory
 # ----------------------------------------------------
 WORKDIR /app
+
+# ----------------------------------------------------
+# 🔹 Copy application files
+# ----------------------------------------------------
 COPY . /app
 
 # ----------------------------------------------------
-# 🔹 Cloud Run expects app listening on $PORT
+# 🔹 Install PHP dependencies (Google Pub/Sub)
 # ----------------------------------------------------
-ENV PORT=8088
-
-EXPOSE 8088
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-progress
 
 # ----------------------------------------------------
-# 🔹 Run PHP built-in web server (recommended for Cloud Run)
+# 🔹 Default command: run the worker
 # ----------------------------------------------------
-CMD ["php", "-S", "0.0.0.0:8088", "index.php"]
+#CMD ["tail", "-f", "/dev/null"]
+CMD ["php", "/app/worker.php"]
