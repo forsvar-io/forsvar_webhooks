@@ -152,6 +152,28 @@ function send_webhook_post($url, $payload, $hmacSecret = null)
     ];
 }
 
+function extractEntityId(array $payload)
+{
+    // Define allowed / known ID fields
+    $possibleKeys = [
+        "party_id",
+        "case_id",
+        "alert_id",
+        "kyc_session_id",
+        "risk_id",
+        "transaction_id",
+        "entity_id",        // generic fallback
+    ];
+
+    foreach ($possibleKeys as $key) {
+        if (isset($payload[$key]) && $payload[$key] !== "" && $payload[$key] !== null) {
+            return $payload[$key];
+        }
+    }
+
+    return 0; // not found
+}
+
 /**
  * -----------------------------
  * PROCESSOR FUNCTION
@@ -172,15 +194,21 @@ function process_webhook(array $data,$messageId)
     $jsonPayload = json_encode($data, JSON_UNESCAPED_UNICODE);
     $eventName   = $data["event"] ?? "unknown";
 
-    // 1️⃣ Insertamos el webhook recibido en DB
-    $webhook = insert_row($conn, "webhooks_events", [
+    $webhook_events_data = [
         "event_name" => $eventName,
         "payload"    => $jsonPayload,
         "message_id" => $messageId,
         "company_id" => $company_id,
+        "entity_id" => extractEntityId($data),
         "processed"  => 0,
         "process_log"=> ""
-    ]);
+    ];
+
+
+    // 1️⃣ Insertamos el webhook recibido en DB
+    $webhook = insert_row($conn, "webhooks_events", $webhook_events_data);
+
+    
 
     $webhook_id = $webhook['lastid'];
 
