@@ -123,11 +123,12 @@ function send_webhook_post($url, $payload, $hmacSecret = null)
 
     $headers = [
         "Content-Type: application/json",
+        "User-Agent: ForsvarWebhook/1.0"
     ];
 
     if ($hmacSecret) {
         $signature = hash_hmac("sha256", $payload, $hmacSecret);
-        $headers[] = "X-FORSVAR-SIGNATURE: $signature";
+        $headers[] = "x-forsvar-signature: $signature";
     }
 
     curl_setopt_array($ch, [
@@ -148,6 +149,7 @@ function send_webhook_post($url, $payload, $hmacSecret = null)
         "success"     => ($error === "" && $status >= 200 && $status < 300),
         "status_code" => $status,
         "response"    => $response,
+        "headers"     => $headers,
         "error"       => $error ?: null,
     ];
 }
@@ -232,7 +234,8 @@ function process_webhook(array $data,$messageId)
 
         update_data($conn, "webhooks_events", [
             "processed"  => 0,
-            "process_log"=> "Company not found"
+            "process_log"=> "Company not found",
+            "http_code" => 500
         ], ["ID = $webhook_id"]);
 
         return;
@@ -249,11 +252,15 @@ function process_webhook(array $data,$messageId)
 
         echo "📬 Webhook delivered to $webhookUrl\n";
 
-        update_data($conn, "webhooks_events", [
+        $update_data = [
             "processed"  => 1,
             "process_log"=> "Delivered successfully",
-            "webhook_url" => $webhookUrl
-        ], ["ID = $webhook_id"]);
+            "webhook_url" => $webhookUrl,
+            "http_code" => $result["status_code"],
+            "header"   => json_encode($result['headers'])
+        ];
+
+        update_data($conn, "webhooks_events", $update_data, ["ID = $webhook_id"]);
 
     } else {
 
@@ -266,7 +273,9 @@ function process_webhook(array $data,$messageId)
         update_data($conn, "webhooks_events", [
             "processed"  => 0,
             "process_log"=> $error_msg,
-            "webhook_url" => $webhookUrl
+            "webhook_url" => $webhookUrl,
+            "http_code" => $result["status_code"],
+            "header"   => json_encode($result['headers'])
         ], ["ID = $webhook_id"]);
     }
 }
