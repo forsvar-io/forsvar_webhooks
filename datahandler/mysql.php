@@ -2153,7 +2153,7 @@
     } 
     
     function get_party_view_column ($conn,$company_id) {
-        $tableName = "party_view";
+        $tableName = "aml.vw_party";
         $columns = "query"; 
         // Filter Type = 1 for Clients
         $filters = array(
