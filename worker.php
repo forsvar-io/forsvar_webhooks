@@ -10,6 +10,7 @@ error_reporting(E_ALL & ~E_DEPRECATED);
  */
 
 require __DIR__ . '/vendor/autoload.php';
+require_once __DIR__ . '/utils.php';
 
 use Google\Cloud\PubSub\PubSubClient;
 
@@ -21,6 +22,10 @@ $subscriptionName = getenv('PUBSUB_SUBSCRIPTION');
 
 if (!$projectId || !$subscriptionName) {
     echo "❌ ERROR: Missing environment variables GOOGLE_PROJECT_ID or PUBSUB_SUBSCRIPTION\n";
+    webhooks_notify_notifications_center_error(
+        'forsvar_webhooks: missing GOOGLE_PROJECT_ID or PUBSUB_SUBSCRIPTION',
+        ['phase' => 'startup']
+    );
     exit(1);
 }
 
@@ -66,6 +71,14 @@ while (true) {
 
             if (json_last_error() !== JSON_ERROR_NONE) {
                 echo "⚠️ Invalid JSON in message. Sending to DLQ...\n";
+                webhooks_notify_notifications_center_error(
+                    'forsvar_webhooks: invalid JSON in Pub/Sub message',
+                    [
+                        'message_id' => $messageId,
+                        'json_error' => json_last_error_msg(),
+                    ],
+                    null
+                );
                 // ACK igual para que pase al DLQ
                 $subscription->acknowledge($message);
                 continue;
@@ -81,6 +94,17 @@ while (true) {
 
             } catch (Throwable $err) {
                 echo "❌ Error processing message: " . $err->getMessage() . "\n";
+                $cid = isset($payload['company_id']) ? (int) $payload['company_id'] : null;
+                webhooks_notify_notifications_center_error(
+                    'forsvar_webhooks: error processing Pub/Sub message — ' . $err->getMessage(),
+                    [
+                        'message_id' => $messageId,
+                        'exception' => get_class($err),
+                        'file' => $err->getFile(),
+                        'line' => $err->getLine(),
+                    ],
+                    ($cid !== null && $cid > 0) ? $cid : null
+                );
                 // No ACK → Pub/Sub lo reintenta y luego DLQ
                 continue;
             }
@@ -94,6 +118,15 @@ while (true) {
 
     } catch (Throwable $ex) {
         echo "❌ Worker error: " . $ex->getMessage() . "\n";
+        webhooks_notify_notifications_center_error(
+            'forsvar_webhooks: worker loop error — ' . $ex->getMessage(),
+            [
+                'exception' => get_class($ex),
+                'file' => $ex->getFile(),
+                'line' => $ex->getLine(),
+            ],
+            null
+        );
         echo "⏳ Sleeping 2 seconds...\n";
         sleep(2);
     }
@@ -216,6 +249,17 @@ function process_webhook(array $data,$messageId)
 
     if (!$webhook_id) {
         echo "❌ Failed to insert webhook\n";
+        $cid = $company_id !== null && $company_id !== '' ? (int) $company_id : null;
+        webhooks_notify_notifications_center_error(
+            'forsvar_webhooks: failed to insert webhooks_events row',
+            [
+                'message_id' => $messageId,
+                'event' => $eventName,
+                'insert_lastid' => $webhook['lastid'] ?? null,
+                'insert_error' => $webhook['error'] ?? null,
+            ],
+            ($cid !== null && $cid > 0) ? $cid : null
+        );
         return;
     }
 
@@ -237,6 +281,17 @@ function process_webhook(array $data,$messageId)
             "process_log"=> "Company not found",
             "http_code" => 500
         ], ["ID = $webhook_id"]);
+
+        $cid = $company_id !== null && $company_id !== '' ? (int) $company_id : null;
+        webhooks_notify_notifications_center_error(
+            'forsvar_webhooks: company not found for webhook delivery',
+            [
+                'webhook_event_id' => $webhook_id,
+                'message_id' => $messageId,
+                'company_id_attempted' => $cid,
+            ],
+            ($cid !== null && $cid > 0) ? $cid : null
+        );
 
         return;
     }
@@ -277,5 +332,20 @@ function process_webhook(array $data,$messageId)
             "http_code" => $result["status_code"],
             "header"   => json_encode($result['headers'])
         ], ["ID = $webhook_id"]);
+
+        $cid = $company_id !== null && $company_id !== '' ? (int) $company_id : null;
+        $respSnippet = is_string($result['response'] ?? null)
+            ? substr($result['response'], 0, 500)
+            : null;
+        webhooks_notify_notifications_center_error(
+            'forsvar_webhooks: outbound webhook delivery failed — ' . $error_msg,
+            [
+                'webhook_event_id' => $webhook_id,
+                'message_id' => $messageId,
+                'http_code' => $result['status_code'],
+                'response_snippet' => $respSnippet,
+            ],
+            ($cid !== null && $cid > 0) ? $cid : null
+        );
     }
 }
