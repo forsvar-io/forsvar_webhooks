@@ -54,7 +54,7 @@ jobs:
         env:
           PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           APPLICATION_CREDENTIALS: ${{ secrets.GCP_SA_KEY_BASE64 }}
-          CLUSTER_NAME: gke-forsvar
+          CLUSTER_NAME: crowder-cluster
           ZONE_NAME: ${{ secrets.REGION }}    
         with:
           args: set image deployment/forsvar-webhooks -n staging *=${{ secrets.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.REPOSITORY_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}         
@@ -65,7 +65,7 @@ jobs:
         env:
           PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           APPLICATION_CREDENTIALS: ${{ secrets.GCP_SA_KEY_BASE64 }}
-          CLUSTER_NAME: gke-forsvar
+          CLUSTER_NAME: crowder-cluster
           ZONE_NAME: ${{ secrets.REGION }}    
         with:
           args: rollout restart deployment/forsvar-webhooks -n staging             
