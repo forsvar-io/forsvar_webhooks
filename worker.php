@@ -298,6 +298,7 @@ function process_webhook(array $data,$messageId)
         return;
     }
 
+    
     $webhookUrl = $companies[0]['webhook_url'];
     $hmacSecret = $companies[0]['webhook_secret'];
 
