@@ -197,6 +197,7 @@ function extractEntityId(array $payload)
         "kyc_session_id",
         "risk_id",
         "transaction_id",
+        "event_id",
         "entity_id",        // generic fallback
     ];
 
