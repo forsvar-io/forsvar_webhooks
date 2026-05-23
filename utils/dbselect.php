@@ -5,6 +5,7 @@
 	$password = $_ENV['DB_PASSWORD'];
 	$dbname = $_ENV['DB_DATABASE'];
 	$port = 3306;
+	
 /*
 	$host = "mysql-container-global";
 	$user = "root";
