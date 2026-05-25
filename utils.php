@@ -1,5 +1,48 @@
 <?php
 
+/**
+ * JSON estructurado para Google Cloud Logging (severity + message + context).
+ * @param array<string, mixed> $context
+ */
+function webhooks_gcp_json_log(string $severity, string $message, array $context = []): void
+{
+    $entry = [
+        'severity'  => $severity,
+        'message'   => $message,
+        'service'   => 'forsvar-webhooks',
+        'timestamp' => gmdate('Y-m-d\TH:i:s\Z'),
+    ];
+    if ($context !== []) {
+        $entry['context'] = $context;
+    }
+    $line = json_encode($entry, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($line === false) {
+        $line = '{"severity":"ERROR","message":"webhooks_gcp_json_log encode failed","service":"forsvar-webhooks"}';
+    }
+    $stream = in_array($severity, ['WARNING', 'ERROR', 'CRITICAL', 'ALERT', 'EMERGENCY'], true)
+        ? 'php://stderr'
+        : 'php://stdout';
+    $fp = @fopen($stream, 'a');
+    if ($fp) {
+        @fwrite($fp, $line . "\n");
+        @fclose($fp);
+    }
+}
+
+/**
+ * Acorta texto para logs (evita entradas enormes en Cloud Logging).
+ */
+function webhooks_log_truncate(?string $s, int $max = 4096): string
+{
+    if ($s === null) {
+        return '';
+    }
+    if (strlen($s) <= $max) {
+        return $s;
+    }
+    return substr($s, 0, $max) . '…(truncated)';
+}
+
 function send_webhook($url, $payload) {
 
     $dataString = json_encode($payload, JSON_UNESCAPED_UNICODE);

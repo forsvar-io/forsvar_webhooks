@@ -305,6 +305,21 @@ function process_webhook(array $data,$messageId)
     // 3️⃣ Enviar webhook
     $result = send_webhook_post($webhookUrl, $jsonPayload, $hmacSecret);
 
+    $parsedUrl = @parse_url($webhookUrl);
+    $webhookHost = is_array($parsedUrl) && !empty($parsedUrl['host']) ? (string) $parsedUrl['host'] : '';
+    webhooks_gcp_json_log('INFO', 'forsvar_webhooks_outbound_http', [
+        'pubsub_message_id' => $messageId,
+        'webhook_event_id' => $webhook_id,
+        'company_id' => $company_id,
+        'event' => $eventName,
+        'webhook_host' => $webhookHost,
+        'delivery_success' => !empty($result['success']),
+        'http_status' => $result['status_code'] ?? 0,
+        'curl_error' => $result['error'] ?? null,
+        'request_payload' => $jsonPayload,
+        'response_body' => webhooks_log_truncate(isset($result['response']) ? (string) $result['response'] : '', 4096),
+    ]);
+
     // 4️⃣ Actualizar registro
     if ($result["success"]) {
 
