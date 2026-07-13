@@ -1,0 +1,17 @@
+---
+description: forsvar_webhooks crea tablas orm_* en runtime (anti-pattern congelado). PROHIBIDO agregar nuevo CREATE/ALTER TABLE en runtime; cualquier necesidad nueva dispara el proyecto de migración a dbmate.
+globs: ["**/*.php", "**/*.sql"]
+alwaysApply: true
+---
+
+# DDL de webhooks — CONGELADO
+
+Este repo crea tablas `orm_*` dinámicas en runtime (`datahandler/mysql.php`). Es un
+anti-pattern conocido y congelado.
+
+- **PROHIBIDO** agregar nuevo `CREATE TABLE` / `ALTER TABLE` en runtime.
+- Necesidad nueva de schema → abrir el proyecto de migración a dbmate (schema fijo +
+  baseline por tenant). No expandir el DDL runtime.
+- Tablas de otros dominios → migración dbmate en su repo DUEÑO (engine/frontend/onboarding).
+
+Convención general: `forsvar_terraform/k8s/base/jobs/README.md`.
