@@ -1,0 +1,81 @@
+name: Deploy to production namespace
+run-name: Deploy to production · ${{ inputs.namespace }} · by ${{ github.actor }}
+
+# Promueve a un namespace de prod (crowder/paigo/bamboo) una imagen YA probada en staging.
+# IMAGEN-ONLY: forsvar-webhooks usa DDL en runtime (anti-pattern CONGELADO), NO dbmate,
+# así que este workflow solo hace set image + rollout. Modelo A2: overlays con __IMAGE__.
+
+on:
+  workflow_dispatch:
+    inputs:
+      namespace:
+        description: 'Namespace de prod'
+        required: true
+        type: choice
+        options:
+          - paigo
+          - crowder
+          - bamboo
+      image:
+        description: 'Image ref completa a promover. Vacío = la que corre en staging ahora.'
+        required: false
+        type: string
+
+concurrency:
+  group: deploy-prod-forsvar-webhooks-${{ github.event.inputs.namespace }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+
+      - name: 'Get GKE credentials'
+        uses: 'google-github-actions/get-gke-credentials@v2'
+        with:
+          cluster_name: crowder-cluster
+          location: ${{ secrets.REGION }}
+
+      - name: Resolver namespace e imagen a promover
+        run: |
+          set -euo pipefail
+          NS='${{ github.event.inputs.namespace }}'
+          case "$NS" in
+            paigo|crowder|bamboo) : ;;
+            *) echo "::error::namespace no soportado: $NS"; exit 1 ;;
+          esac
+          IMG_IN='${{ github.event.inputs.image }}'
+          if [ -n "$IMG_IN" ]; then
+            IMG="$IMG_IN"
+          else
+            IMG=$(kubectl get deployment/forsvar-webhooks -n staging \
+              -o jsonpath='{.spec.template.spec.containers[?(@.name=="forsvar-webhooks-container")].image}')
+          fi
+          [ -n "$IMG" ] || { echo "::error::no pude resolver la imagen a promover"; exit 1; }
+          echo "NS=$NS"   >> "$GITHUB_ENV"
+          echo "IMG=$IMG" >> "$GITHUB_ENV"
+          echo "▶ Promoviendo a '$NS': $IMG"
+
+      - name: Prechecks (config/secrets del namespace)
+        run: |
+          set -euo pipefail
+          for r in configmap/frontend-config secret/frontend-secret; do
+            kubectl get "$r" -n "$NS" >/dev/null 2>&1 \
+              || { echo "::error::falta $r en $NS — aplicá el overlay de terraform antes de deployar"; exit 1; }
+          done
+
+      - name: Set image + rollout
+        run: |
+          set -euo pipefail
+          kubectl set image deployment/forsvar-webhooks forsvar-webhooks-container="$IMG" -n "$NS"
+          kubectl rollout status deployment/forsvar-webhooks -n "$NS" --timeout=180s
