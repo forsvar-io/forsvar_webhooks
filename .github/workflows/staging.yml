@@ -17,12 +17,12 @@ jobs:
         uses: actions/checkout@v2
 
       - id: 'auth'
-        uses: 'google-github-actions/auth@v1'
+        uses: 'google-github-actions/auth@v2'
         with:
           credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
       - name: 'Set up Cloud SDK'
-        uses: 'google-github-actions/setup-gcloud@v1'
+        uses: 'google-github-actions/setup-gcloud@v2'
 
       - name: 'Use gcloud CLI'
         run: 'gcloud info'
@@ -48,24 +48,17 @@ jobs:
           docker push ${{ secrets.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.REPOSITORY_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
           docker push ${{ secrets.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.REPOSITORY_NAME }}/forsvar-webhooks-staging:latest
 
-      # Step 6: Set Image to Deployment GKE
-      - name: Set up kubectl
-        uses: ameydev/gke-kubectl-action@master
-        env:
-          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-          APPLICATION_CREDENTIALS: ${{ secrets.GCP_SA_KEY_BASE64 }}
-          CLUSTER_NAME: crowder-cluster
-          ZONE_NAME: ${{ secrets.REGION }}    
+      # Obtener credenciales del cluster (gke-gcloud-auth-plugin oficial)
+      - name: 'Get GKE credentials'
+        uses: 'google-github-actions/get-gke-credentials@v2'
         with:
-          args: set image deployment/forsvar-webhooks -n staging *=${{ secrets.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.REPOSITORY_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}         
+          cluster_name: crowder-cluster
+          location: ${{ secrets.REGION }}
 
-      # Step 6: roll Out Deployment
-      - name: Roll Out Deployment
-        uses: ameydev/gke-kubectl-action@master
-        env:
-          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-          APPLICATION_CREDENTIALS: ${{ secrets.GCP_SA_KEY_BASE64 }}
-          CLUSTER_NAME: crowder-cluster
-          ZONE_NAME: ${{ secrets.REGION }}    
-        with:
-          args: rollout restart deployment/forsvar-webhooks -n staging             
+      # Set image en el deployment
+      - name: Set image on deployment
+        run: kubectl set image deployment/forsvar-webhooks '*=${{ secrets.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.REPOSITORY_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}' -n staging
+
+      # Rollout
+      - name: Roll out deployment
+        run: kubectl rollout restart deployment/forsvar-webhooks -n staging
