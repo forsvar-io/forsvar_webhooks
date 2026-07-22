@@ -55,9 +55,16 @@ jobs:
           cluster_name: crowder-cluster
           location: ${{ secrets.REGION }}
 
-      # Set image en el deployment
+      # Set image en el deployment.
+      # OJO: el target es el CONTAINER POR NOMBRE, no el wildcard '*='. Con '*=' kubectl
+      # pisa la imagen de TODOS los containers del pod — incluido el initContainer
+      # cloud-sql-proxy (native sidecar), que queda apuntando a la imagen de la app y
+      # crashea con `executable file not found in $PATH`. Eso dejó este deployment sin
+      # poder rolear durante 8 días (2026-07-13 → 2026-07-21) sirviendo una imagen vieja,
+      # y en silencio: el pod anterior seguía Running, así que Available=True.
+      # deploy-prod.yml ya usa la forma por nombre; esto lo alinea.
       - name: Set image on deployment
-        run: kubectl set image deployment/forsvar-webhooks '*=${{ secrets.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.REPOSITORY_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}' -n staging
+        run: kubectl set image deployment/forsvar-webhooks 'forsvar-webhooks-container=${{ secrets.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.REPOSITORY_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}' -n staging
 
       # Rollout
       - name: Roll out deployment
