@@ -5,6 +5,18 @@ on:
     branches:
       - staging  # Change this to your default branch if different
 
+# Serializa los deploys a staging. Sin esto, dos merges seguidos disparan dos corridas en
+# paralelo y gana la que TERMINA ultima, no la mas nueva: si el build del commit viejo
+# tarda un poco mas, pisa al nuevo con un `kubectl set image` de codigo anterior. Las dos
+# quedan en verde y el commit nuevo simplemente no se despliega, sin ninguna señal.
+#
+# cancel-in-progress: false y no true — cancelar un deploy a mitad de camino puede cortar
+# el rollout o dejar el migrate-job huerfano. La segunda corrida espera a que termine la
+# primera. Misma convencion que ya usan los deploy-prod.yml de todos los repos.
+concurrency:
+  group: staging-deploy-forsvar_webhooks-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
