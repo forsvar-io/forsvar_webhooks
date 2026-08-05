@@ -346,7 +346,12 @@
 
     function get_checklogin_user_info ($conn,$username,$password) {
         $mypassword = md5($password);
-        $sql="SELECT * FROM users WHERE nickname='$username' and password='$mypassword'";
+        // $username llega del input del usuario → escapar para evitar SQL injection: un
+        // nickname como  admin'--  comentaba el chequeo de password y devolvia la fila
+        // igual. Mismo arreglo que ya se aplico a esta funcion en forsvar_frontend.
+        // $mypassword es md5(): siempre [0-9a-f]{32}, no inyectable.
+        $nick = mysqli_real_escape_string($conn, $username);
+        $sql="SELECT * FROM users WHERE nickname='$nick' and password='$mypassword'";
 
         $result=mysqli_query($conn,$sql);
         while ($row = mysqli_fetch_assoc($result)) {
