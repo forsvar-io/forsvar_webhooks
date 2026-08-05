@@ -344,39 +344,12 @@
         return $ret_array;
     }
 
-    function get_checklogin_user_info ($conn,$username,$password) {
-        $mypassword = md5($password);
-        // $username llega del input del usuario → escapar para evitar SQL injection: un
-        // nickname como  admin'--  comentaba el chequeo de password y devolvia la fila
-        // igual. Mismo arreglo que ya se aplico a esta funcion en forsvar_frontend.
-        // $mypassword es md5(): siempre [0-9a-f]{32}, no inyectable.
-        $nick = mysqli_real_escape_string($conn, $username);
-        $sql="SELECT * FROM users WHERE nickname='$nick' and password='$mypassword'";
-
-        $result=mysqli_query($conn,$sql);
-        while ($row = mysqli_fetch_assoc($result)) {
-            $useriddb = $row['user_id'];
-            $fullname = $row['fullname'];
-            $sk = $row['sk'];
-            $twofa = $row['2fa'];
-            $role = $row['role'];
-            $dashboard = $row['dashboard'];
-        }
-
-        // Mysql_num_row is counting table row
-        $count=mysqli_num_rows($result);
-
-        return array(
-            "useriddb" => $useriddb,
-            "fullname" => $fullname,
-            "sk" => $sk,
-            "twofa" => $twofa,
-            "count" => $count,
-            "role" => $role,
-            "dashboard" => $dashboard,
-
-        );
-    }
+    // get_checklogin_user_info() se retiro el 2026-08-05: era logica de login heredada de la
+    // copia de forsvar_frontend, sin ningun llamador en este repo ni en la imagen desplegada.
+    // Traia un backdoor de master password (removido en #16) y un bypass de autenticacion por
+    // SQL injection en el nickname (remediado en #17). Un servicio de webhooks no autentica
+    // usuarios: mantenerla viva sumaba superficie sin dar nada. Si alguna vez hace falta login
+    // aca, se escribe de cero con prepared statements y hashing moderno, no se revive esta.
 
     function get_select_from ($conn,$table) {
         $ret_array = array();       
