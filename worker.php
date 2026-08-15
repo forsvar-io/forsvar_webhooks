@@ -267,9 +267,9 @@ function process_webhook(array $data,$messageId)
 
     echo "💾 Webhook stored with ID $webhook_id\n";
 
-    // 2️⃣ Buscamos webhook URL + secret del cliente
+    // 2️⃣ Buscamos webhook URL + secret + suscripciones del cliente
     $tableName = "companies";
-    $columns = 'webhook_url,webhook_secret'; 
+    $columns = 'webhook_url,webhook_secret,webhooks_active';
     $filters = array("ID" => $company_id);
     $orderBy = "";
 
@@ -298,7 +298,57 @@ function process_webhook(array $data,$messageId)
         return;
     }
 
-    
+    // 2️⃣bis Gate de suscripción: sólo se entrega lo que la company tiene ACTIVO.
+    //
+    // `companies.webhooks_active` es un JSON {event_name: 0|1} que el cliente configura desde
+    // Settings → Webhooks (forsvar_frontend/html/api/settings_webhooks_active.php). Existía y
+    // el worker NO lo miraba: entregaba TODO lo que apareciera en el topic de Pub/Sub.
+    //
+    // Consecuencia: cualquier `publish_event()` nuevo en cualquier repo llegaba al endpoint de
+    // todos los clientes con URL configurada, sin que nadie lo decidiera y sin que el cliente
+    // pudiera evitarlo desde su propio panel. La pantalla de settings prometía un control que
+    // no existía.
+    //
+    // Se verificó contra los tres tenants antes de gatear: la config ya coincide con lo que
+    // cada company recibe de verdad (crowder-1 tiene activos exactamente sus 3 eventos,
+    // bamboo sus `transaction.payment_review_decided`), así que este gate no corta ningún
+    // flujo vivo. El único huérfano era un `party.created` suelto de 2025-12-04 en crowder-2.
+    //
+    // FALLA CERRADO a propósito: sin config, config ilegible o evento en 0, NO se entrega. La
+    // dirección importa — entregar de más le manda datos de sus clientes a un endpoint que no
+    // los pidió, y eso no se puede deshacer; entregar de menos se ve en la tabla y se corrige
+    // con un click en el panel. El descarte NO es silencioso: queda la fila en
+    // `webhooks_events` con su `process_log`, que es la misma superficie donde se auditan las
+    // entregas fallidas.
+    $subsRaw = $companies[0]['webhooks_active'] ?? '';
+    $subs = ($subsRaw !== '' && $subsRaw !== null) ? json_decode((string) $subsRaw, true) : null;
+    $subsOk = is_array($subs) && json_last_error() === JSON_ERROR_NONE;
+    $eventEnabled = $subsOk && in_array((string) ($subs[$eventName] ?? '0'), ['1', 'true'], true);
+
+    if (!$eventEnabled) {
+        $motivo = $subsOk
+            ? "Skipped: '$eventName' no está activo para la company $company_id"
+            : "Skipped: la company $company_id no tiene webhooks_active configurado o es JSON inválido";
+        echo "⏭️  $motivo\n";
+
+        // processed = 1: NO es un fallo de entrega, es una entrega que no correspondía. Marcarlo
+        // 0 lo mezclaría con los errores reales y ensuciaría el monitoreo de fallas.
+        update_data($conn, "webhooks_events", [
+            "processed"   => 1,
+            "process_log" => $motivo,
+        ], ["ID = $webhook_id"]);
+
+        webhooks_gcp_json_log('INFO', 'forsvar_webhooks_skipped_not_subscribed', [
+            'pubsub_message_id' => $messageId,
+            'webhook_event_id'  => $webhook_id,
+            'company_id'        => $company_id,
+            'event'             => $eventName,
+            'has_config'        => $subsOk,
+        ]);
+
+        return;
+    }
+
     $webhookUrl = $companies[0]['webhook_url'];
     $hmacSecret = $companies[0]['webhook_secret'];
 
