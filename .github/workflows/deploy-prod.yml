@@ -16,6 +16,7 @@ on:
           - paigo
           - crowder
           - bamboo
+          - prontopago
       image:
         description: 'Image ref completa a promover. Vacío = la que corre en staging ahora.'
         required: false
@@ -51,7 +52,7 @@ jobs:
           set -euo pipefail
           NS='${{ github.event.inputs.namespace }}'
           case "$NS" in
-            paigo|crowder|bamboo) : ;;
+            paigo|crowder|bamboo|prontopago) : ;;
             *) echo "::error::namespace no soportado: $NS"; exit 1 ;;
           esac
           IMG_IN='${{ github.event.inputs.image }}'
